@@ -6,7 +6,6 @@
 #include <cstdint> //uint32_t
 #include <cassert> 
 
-//no virtual dtor because runtime polymorphism is not used
 struct Event 
 {
     template <typename EventType>
