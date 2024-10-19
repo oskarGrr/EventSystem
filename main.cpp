@@ -32,6 +32,9 @@ template <typename... EventTs>
 class EventSystem
 {
 public:
+    auto const& getPublisher() const {return mPublisher;}
+    auto& getSubscriber() {return mSubscriber;}
+private:
 
     static_assert((std::is_base_of_v<Event, EventTs> && ...), 
         "All event types must inherit from Event");
@@ -116,11 +119,7 @@ public:
     friend struct Subscriber;
     friend struct Publisher;
 
-    auto const& getPublisher() const {return mPublisher;}
-    auto& getSubscriber() {return mSubscriber;}
-
 private:
-
     //A map from event types -> a list of subscription callbacks.
     std::unordered_map< std::type_index, std::vector<OnEventCallback> > mSubscriptions;
 
@@ -146,7 +145,7 @@ int main()
     MyEventSystem eventSys;
 
     auto& subscriber { eventSys.getSubscriber() };
-
+    
     auto eventType1ID = subscriber.sub<EventType1>([](Event& e)
     {
         auto& evnt { e.unpack<EventType1>(e) };
