@@ -78,11 +78,14 @@ public:
                 " EventSystem::Subscriber::unsub was not a valid event type for this EventSystem."
             );
 
-            auto it { mSubscriptions.find(typeid(EventType)) };
-            if(it != mSubscriptions.end())
+            auto it { mThisEventSys.mSubscriptions.find(typeid(EventType)) };
+            if(it != mThisEventSys.mSubscriptions.end())
             {
-                it->second.erase(subID);
-                if(it->second.empty()) { mSubscriptions.erase(it); }
+                auto& callbackVector { it->second.eventCallbacks };
+                callbackVector.erase(callbackVector.begin() + subID);
+
+                if(callbackVector.empty())
+                    mThisEventSys.mSubscriptions.erase(it);
             }
         }
 
@@ -150,7 +153,9 @@ int main()
 {
     MyEventSystem eventSys;
 
-    eventSys.getSubscriber().sub<EventType1>([](Event& e)
+    auto& subscriber { eventSys.getSubscriber() };
+
+    auto eventType1ID = subscriber.sub<EventType1>([](Event& e)
     {
         auto& evnt { e.unpack<EventType1>(e) };
 
@@ -160,12 +165,12 @@ int main()
         std::cout << "x = " << evnt.x << ", y = " << evnt.y << '\n';
     });
 
-    eventSys.getSubscriber().sub<EventType2>([](Event& e)
+    subscriber.sub<EventType2>([](Event& e)
     {
         std::cout << "EventType2 has been published!\n";
     });
 
-    eventSys.getSubscriber().sub<EventType4>([](Event& e)
+    subscriber.sub<EventType4>([](Event& e)
     {
         std::cout << "EventType4 has been published!\n";
     });
@@ -184,4 +189,10 @@ int main()
     //this does nothing since there was no subscription to EventType3
     EventType3 e3{};
     publisher.pub(e3);
+
+    //now unsubscribed from EventType1
+    subscriber.unsub<EventType1>(eventType1ID);
+
+    //nothing responds to e1 being published now that the subscription was removed
+    publisher.pub(e1);
 }
