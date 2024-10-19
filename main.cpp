@@ -37,13 +37,7 @@ public:
         "All event types must inherit from Event");
 
     using OnEventCallback = std::function<void(Event&)>;
-    using SubscriptionID = uint32_t;
-
-    struct SubscriptionList
-    {
-        std::vector<OnEventCallback> eventCallbacks;
-        SubscriptionID nextSubscriptionID {0};
-    };
+    using SubscriptionID = std::size_t;
 
     struct Subscriber
     {
@@ -59,13 +53,9 @@ public:
                 " EventSystem::Subscriber::sub was not a valid event type for this EventSystem."
             );
             
-            auto& subscriptionList { mThisEventSys.mSubscriptions[typeid(EventType)] };
-
-            subscriptionList.eventCallbacks.push_back(std::move(callback));
-
-            auto const retVal { subscriptionList.nextSubscriptionID };
-            ++subscriptionList.nextSubscriptionID;
-            return retVal;
+            auto& callbackVector { mThisEventSys.mSubscriptions[typeid(EventType)] };
+            callbackVector.push_back(std::move(callback));
+            return callbackVector.size() - 1;
         }
 
         template <typename EventType>
@@ -81,11 +71,13 @@ public:
             auto it { mThisEventSys.mSubscriptions.find(typeid(EventType)) };
             if(it != mThisEventSys.mSubscriptions.end())
             {
-                auto& callbackVector { it->second.eventCallbacks };
+                auto& callbackVector { it->second };
                 callbackVector.erase(callbackVector.begin() + subID);
 
                 if(callbackVector.empty())
+                {
                     mThisEventSys.mSubscriptions.erase(it);
+                }
             }
         }
 
@@ -112,7 +104,7 @@ public:
         
             if(it != mThisEventSys.mSubscriptions.end())
             {
-                for(auto const& fn : it->second.eventCallbacks)
+                for(auto const& fn : it->second)
                     fn(e);
             }
         }
@@ -129,8 +121,8 @@ public:
 
 private:
 
-    //A map from event types to a list of subscribers.
-    std::unordered_map< std::type_index, SubscriptionList > mSubscriptions;
+    //A map from event types -> a list of subscription callbacks.
+    std::unordered_map< std::type_index, std::vector<OnEventCallback> > mSubscriptions;
 
     //use getSubscriber() and getPublisher() to get access to these, allowing the 
     //user of this event system to subscribe/unsubscribe or publish to events 
