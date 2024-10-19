@@ -33,7 +33,6 @@ class EventSystem
 public:
     auto const& getPublisher() const {return mPublisher;}
     auto& getSubscriber() {return mSubscriber;}
-private:
 
     static_assert((std::is_base_of_v<Event, EventTs> && ...), 
         "All event types must inherit from Event");
