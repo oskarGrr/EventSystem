@@ -9,12 +9,12 @@
 struct Event 
 {
     template <typename EventType>
-    auto& unpack(Event& e) 
+    auto const& unpack(Event const& e) const
     {
 #ifdef NDEBUG
         return static_cast<EventType&>(e);
 #else
-        auto* downCastPtr { dynamic_cast<EventType*>(&e) };
+        EventType const* downCastPtr { dynamic_cast<EventType const*>(&e) };
         assert(downCastPtr && "trying to do an invalid downcast");
         return *downCastPtr;
 #endif
@@ -38,7 +38,7 @@ public:
         "All event types must inherit from Event");  
 
     using SubscriptionID  = std::size_t;
-    using OnEventCallback = std::function<void(Event&)>;
+    using OnEventCallback = std::function<void(Event const&)>;
 
     struct Subscriber
     {
@@ -144,9 +144,9 @@ int main()
 
     auto& subscriber { eventSys.getSubscriber() };
     
-    auto const eventType1ID = subscriber.sub<EventType1>([](Event& e)
+    auto const eventType1ID = subscriber.sub<EventType1>([](Event const& e)
     {
-        auto& evnt { e.unpack<EventType1>(e) };
+        auto const& evnt { e.unpack<EventType1>(e) };
 
         std::cout << "EventType1 has been published! ";
 
@@ -154,12 +154,12 @@ int main()
         std::cout << "x = " << evnt.x << ", y = " << evnt.y << '\n';
     });
 
-    subscriber.sub<EventType2>([](Event& e)
+    subscriber.sub<EventType2>([](Event const& e)
     {
         std::cout << "EventType2 has been published!\n";
     });
 
-    subscriber.sub<EventType4>([](Event& e)
+    subscriber.sub<EventType4>([](Event const& e)
     {
         std::cout << "EventType4 has been published!\n";
     });
