@@ -35,10 +35,10 @@ public:
     auto& getSubscriber() {return mSubscriber;}
 
     static_assert((std::is_base_of_v<Event, EventTs> && ...), 
-        "All event types must inherit from Event");
+        "All event types must inherit from Event");  
 
+    using SubscriptionID  = std::size_t;
     using OnEventCallback = std::function<void(Event&)>;
-    using SubscriptionID = std::size_t;
 
     struct Subscriber
     {
@@ -54,9 +54,11 @@ public:
                 " EventSystem::Subscriber::sub was not a valid event type for this EventSystem."
             );
             
-            auto& callbackVector { mThisEventSys.mSubscriptions[typeid(EventType)] };
-            callbackVector.push_back(std::move(callback));
-            return callbackVector.size() - 1;
+            auto& callbackVector { mThisEventSys.mCallbackMap[typeid(EventType)] };
+            auto subID { mNextSubscriptionID++ };
+            callbackVector.emplace_back(std::move(callback), subID);
+
+            return subID;
         }
 
         template <typename EventType>
@@ -69,21 +71,18 @@ public:
                 " EventSystem::Subscriber::unsub was not a valid event type for this EventSystem."
             );
 
-            auto it { mThisEventSys.mSubscriptions.find(typeid(EventType)) };
-            if(it != mThisEventSys.mSubscriptions.end())
-            {
-                auto& callbackVector { it->second };
-                callbackVector.erase(callbackVector.begin() + subID);
+            auto& callbackVector { mThisEventSys.mCallbackMap[typeid(EventType)] };
 
-                if(callbackVector.empty())
-                {
-                    mThisEventSys.mSubscriptions.erase(it);
-                }
-            }
+            //remove the callback associated with subID
+            std::erase_if(callbackVector,[subID](auto const& callbackIDPair)
+            {
+                return callbackIDPair.second == subID;
+            });
         }
 
     private:
         EventSystem<EventTs...>& mThisEventSys;
+        SubscriptionID mNextSubscriptionID {0};
     };
 
     struct Publisher
@@ -100,13 +99,13 @@ public:
                 " EventSystem::pub was not a valid event type for this EventSystem."
             );
         
-            //find the list of subscribers associated with this event type (if any)
-            auto const it { mThisEventSys.mSubscriptions.find(typeid(e)) };
-        
-            if(it != mThisEventSys.mSubscriptions.end())
+            //find the list of callbacks associated with this event type (if any)
+            auto const it { mThisEventSys.mCallbackMap.find(typeid(e)) };
+            
+            if(it != mThisEventSys.mCallbackMap.end())
             {
-                for(auto const& fn : it->second)
-                    fn(e);
+                for(auto const& callbackAndIDPair : it->second)
+                    callbackAndIDPair.first(e);
             }
         }
 
@@ -119,10 +118,11 @@ public:
 
 private:
     //A map from event types -> a list of subscription callbacks.
-    std::unordered_map< std::type_index, std::vector<OnEventCallback> > mSubscriptions;
+    std::unordered_map<std::type_index, 
+        std::vector<std::pair<OnEventCallback, SubscriptionID>>> mCallbackMap;
 
-    //use getSubscriber() and getPublisher() to get access to these, allowing the 
-    //user of this event system to subscribe/unsubscribe or publish to events 
+    //use getSubscriber()/getPublisher() to get access to these, allowing the 
+    //user of this event system to sub/unsub or publish events respectively.
     Subscriber mSubscriber {*this};
     Publisher  mPublisher  {*this};
 };
@@ -144,7 +144,7 @@ int main()
 
     auto& subscriber { eventSys.getSubscriber() };
     
-    auto eventType1ID = subscriber.sub<EventType1>([](Event& e)
+    auto const eventType1ID = subscriber.sub<EventType1>([](Event& e)
     {
         auto& evnt { e.unpack<EventType1>(e) };
 
@@ -179,9 +179,8 @@ int main()
     EventType3 e3{};
     publisher.pub(e3);
 
-    //now unsubscribed from EventType1
     subscriber.unsub<EventType1>(eventType1ID);
 
-    //nothing responds to e1 being published now that the subscription was removed
+    //nothing responds to e1 being published, now that the subscription was removed
     publisher.pub(e1);
 }
