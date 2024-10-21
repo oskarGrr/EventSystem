@@ -9,12 +9,12 @@
 struct Event 
 {
     template <typename EventType>
-    auto const& unpack(Event const& e) const
+    auto const& unpack() const
     {
 #ifdef NDEBUG
-        return static_cast<EventType&>(e);
+        return static_cast<EventType const&>(e);
 #else
-        EventType const* downCastPtr { dynamic_cast<EventType const*>(&e) };
+        EventType const* downCastPtr { dynamic_cast<EventType const*>(this) };
         assert(downCastPtr && "trying to do an invalid downcast");
         return *downCastPtr;
 #endif
@@ -146,7 +146,7 @@ int main()
     
     auto const eventType1ID = subscriber.sub<EventType1>([](Event const& e)
     {
-        auto const& evnt { e.unpack<EventType1>(e) };
+        auto const& evnt { e.unpack<EventType1>() };
 
         std::cout << "EventType1 has been published! ";
 
