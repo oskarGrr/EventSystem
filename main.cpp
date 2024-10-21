@@ -1,131 +1,5 @@
 #include <iostream>
-#include <functional> //std::function
-#include <unordered_map>
-#include <typeindex>
-#include <utility> //std::move
-#include <cstdint> //uint32_t
-#include <cassert> 
-
-struct Event 
-{
-    template <typename EventType>
-    auto const& unpack() const
-    {
-#ifdef NDEBUG
-        return static_cast<EventType const&>(e);
-#else
-        EventType const* downCastPtr { dynamic_cast<EventType const*>(this) };
-        assert(downCastPtr && "trying to do an invalid downcast");
-        return *downCastPtr;
-#endif
-    }
-
-protected:
-    virtual ~Event()=default;
-};
-
-template <typename T, typename... Types>
-concept IsTypeInPack = (std::is_same_v<T, Types> || ...);
-
-template <typename... EventTs>
-class EventSystem
-{
-public:
-    auto const& getPublisher() const {return mPublisher;}
-    auto& getSubscriber() {return mSubscriber;}
-
-    static_assert((std::is_base_of_v<Event, EventTs> && ...), 
-        "All event types must inherit from Event");  
-
-    using SubscriptionID  = std::size_t;
-    using OnEventCallback = std::function<void(Event const&)>;
-
-    struct Subscriber
-    {
-        Subscriber(EventSystem<EventTs...>& thisEventSys) : mThisEventSys{thisEventSys} {}
-
-        template <typename EventType>
-        SubscriptionID sub(OnEventCallback callback)
-        {
-            static_assert
-            (
-                IsTypeInPack<EventType, EventTs...>, 
-                "The template type paramater passed to"
-                " EventSystem::Subscriber::sub was not a valid event type for this EventSystem."
-            );
-            
-            auto& callbackVector { mThisEventSys.mCallbackMap[typeid(EventType)] };
-            auto subID { mNextSubscriptionID++ };
-            callbackVector.emplace_back(std::move(callback), subID);
-
-            return subID;
-        }
-
-        template <typename EventType>
-        void unsub(SubscriptionID subID)
-        {
-            static_assert
-            (
-                IsTypeInPack<EventType, EventTs...>, 
-                "The template type paramater passed to"
-                " EventSystem::Subscriber::unsub was not a valid event type for this EventSystem."
-            );
-
-            auto& callbackVector { mThisEventSys.mCallbackMap[typeid(EventType)] };
-
-            //remove the callback associated with subID
-            std::erase_if(callbackVector,[subID](auto const& callbackIDPair)
-            {
-                return callbackIDPair.second == subID;
-            });
-        }
-
-    private:
-        EventSystem<EventTs...>& mThisEventSys;
-        SubscriptionID mNextSubscriptionID {0};
-    };
-
-    struct Publisher
-    {
-        Publisher(EventSystem<EventTs...> const& thisEventSys) : mThisEventSys{thisEventSys} {}
-        
-        template <typename EventType>
-        void pub(EventType& e) const
-        {
-            static_assert
-            (
-                IsTypeInPack<EventType, EventTs...>, 
-                "The template type paramater passed to"
-                " EventSystem::pub was not a valid event type for this EventSystem."
-            );
-        
-            //find the list of callbacks associated with this event type (if any)
-            auto const it { mThisEventSys.mCallbackMap.find(typeid(e)) };
-            
-            if(it != mThisEventSys.mCallbackMap.end())
-            {
-                for(auto const& callbackAndIDPair : it->second)
-                    callbackAndIDPair.first(e);
-            }
-        }
-
-    private:
-        EventSystem<EventTs...> const& mThisEventSys;
-    };
-
-    friend struct Subscriber;
-    friend struct Publisher;
-
-private:
-    //A map from event types -> a list of subscription callbacks.
-    std::unordered_map<std::type_index, 
-        std::vector<std::pair<OnEventCallback, SubscriptionID>>> mCallbackMap;
-
-    //use getSubscriber()/getPublisher() to get access to these, allowing the 
-    //user of this event system to sub/unsub or publish events respectively.
-    Subscriber mSubscriber {*this};
-    Publisher  mPublisher  {*this};
-};
+#include "EventSys.hpp"
 
 struct EventType1 : Event 
 { 
@@ -138,34 +12,30 @@ struct EventType4 : Event {};
 
 using MyEventSystem = EventSystem<EventType1, EventType2, EventType3, EventType4>;
 
+enum struct SubscriptionTypes
+{
+    EVENT_TYPE_1,
+    EVENT_TYPE_1A,
+    EVENT_TYPE_2,
+    EVENT_TYPE_3,
+    EVENT_TYPE_4
+};
+
+using MySubscriptionManager = SubscriptionManager<SubscriptionTypes, MyEventSystem::Subscriber>;
+
+void subToEvents(MySubscriptionManager&);
+
 int main()
 {
     MyEventSystem eventSys;
+    MySubscriptionManager subManager{ eventSys.getSubscriber() };
 
-    auto& subscriber { eventSys.getSubscriber() };
-    
-    auto const eventType1ID = subscriber.sub<EventType1>([](Event const& e)
-    {
-        auto const& evnt { e.unpack<EventType1>() };
-
-        std::cout << "EventType1 has been published! ";
-
-        //print the data inside this event type
-        std::cout << "x = " << evnt.x << ", y = " << evnt.y << '\n';
-    });
-
-    subscriber.sub<EventType2>([](Event const& e)
-    {
-        std::cout << "EventType2 has been published!\n";
-    });
-
-    subscriber.sub<EventType4>([](Event const& e)
-    {
-        std::cout << "EventType4 has been published!\n";
-    });
+    subToEvents(subManager);
 
     auto const& publisher { eventSys.getPublisher() };
 
+    //Publish an event of type EventType1 and pass in some data that will
+    //be recieved by any subscriptions to this event type.
     EventType1 e1{1, 1};
     publisher.pub(e1);
 
@@ -175,12 +45,48 @@ int main()
     EventType4 e4{};
     publisher.pub(e4);
 
-    //this does nothing since there was no subscription to EventType3
+    //this does nothing since there never a subscription to the type EventType3
     EventType3 e3{};
     publisher.pub(e3);
 
-    subscriber.unsub<EventType1>(eventType1ID);
+    //uh oh SubscriptionTypes::EVENT_TYPE_2 is associated with a subscription, but not a subscription to EventType1.
+    bool didUnsubSucceed { subManager.unsub<EventType1>(SubscriptionTypes::EVENT_TYPE_2) };
 
-    //nothing responds to e1 being published, now that the subscription was removed
-    publisher.pub(e1);
+    //this check will pass since we accidentaly typed EventType1 instead of the event type that is 
+    //associated with SubscriptionTypes::EVENT_TYPE_2 (EventType2). 
+    //the subscription associated with SubscriptionTypes::EVENT_TYPE_2 is still in the event system.
+    assert( ! didUnsubSucceed );
+
+    //this time the enum tag SubscriptionTypes::EVENT_TYPE_2 was a valid subscription that was subscribed to 
+    //the event type EventType2, so unsub will be successful, and didUnsubSucceed will be set to true.
+    didUnsubSucceed = subManager.unsub<EventType2>(SubscriptionTypes::EVENT_TYPE_2);
+
+    assert(didUnsubSucceed);
+
+    //publishing an event of type EventType2 does nothing now
+    publisher.pub(e2);
+}
+
+void subToEvents(MySubscriptionManager& subManager)
+{
+    subManager.sub<EventType1>(SubscriptionTypes::EVENT_TYPE_1, [](Event const& e)
+    {
+        std::cout << "EventType1 has been published! ";
+
+        //print the data inside this event type.
+        //Event::unpack will make sure you did not accidentally sub to a type 
+        //that differs from the type you are trying to downcast to (in debug mode)
+        auto const& evnt { e.unpack<EventType1>() };
+        std::cout << "x = " << evnt.x << ", y = " << evnt.y << '\n';
+    });
+
+    subManager.sub<EventType2>(SubscriptionTypes::EVENT_TYPE_2, [](Event const& e)
+    {
+        std::cout << "EventType2 has been published!\n";
+    });
+
+    subManager.sub<EventType4>(SubscriptionTypes::EVENT_TYPE_4, [](Event const& e)
+    {
+        std::cout << "EventType4 has been published!\n";
+    });
 }
