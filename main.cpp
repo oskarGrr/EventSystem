@@ -52,13 +52,13 @@ int main()
     //uh oh SubscriptionTypes::EVENT_TYPE_2 is associated with a subscription, but not a subscription to EventType1.
     bool didUnsubSucceed { subManager.unsub<EventType1>(SubscriptionTypes::EVENT_TYPE_2) };
 
-    //this check will pass since we accidentaly typed EventType1 instead of the event type that is 
+    //this check will pass since we accidentally typed EventType1 instead of the event type that is 
     //associated with SubscriptionTypes::EVENT_TYPE_2 (EventType2). 
     //the subscription associated with SubscriptionTypes::EVENT_TYPE_2 is still in the event system.
     assert( ! didUnsubSucceed );
 
     //this time the enum tag SubscriptionTypes::EVENT_TYPE_2 was a valid subscription that was subscribed to 
-    //the event type EventType2, so unsub will be successful, and didUnsubSucceed will be set to true.
+    //the type EventType2, so unsub will be successful, and didUnsubSucceed will be set to true.
     didUnsubSucceed = subManager.unsub<EventType2>(SubscriptionTypes::EVENT_TYPE_2);
 
     assert(didUnsubSucceed);
