@@ -156,18 +156,33 @@ class SubscriptionManager
 public:
     SubscriptionManager(EventSubscriber& subscriber) : mSubscriber{subscriber} {};
 
+    //Returns false if subscriptionTag is already associated with a subscription.
+    //(otherwise returns true if the subscription was successfully put into the event system)
+    //This could be the case if you accidentally call this function twice with the same enum or
+    //if you accidentally map two different enums to the same integer value... dont do this.
     template <typename EventType>
-    void sub(Enum subscriptionTag, OnEventCallback callback)
+    bool sub(Enum subscriptionTag, OnEventCallback callback)
     {
-        mSubscriptions[subscriptionTag] = mSubscriber.sub<EventType>(std::move(callback));
+        //return false: this enum tag is already associated with a subscription.
+        if(mSubscriptions.contains(subscriptionTag))
+            return false;
+
+        auto const ID { mSubscriber.sub<EventType>(std::move(callback)) };
+        mSubscriptions.try_emplace(subscriptionTag, ID);
+
+        return true;
     }
 
+    //Returns false if the unsubscription was not successful. This could be because you accidentally 
+    //used the wrong template type paramater (EventType does not match the type the subscription is subscribed to),
+    //or because you are not subscribed to this subscription at all.
     template <typename EventType>
     bool unsub(Enum subscriptionTag)
     {
         if(auto it{mSubscriptions.find(subscriptionTag)}; it != mSubscriptions.end())
             return mSubscriber.unsub<EventType>(it->second);
 
+        //Return false: this enum tag was not associated with a subscription yet.
         return false;
     }
 
