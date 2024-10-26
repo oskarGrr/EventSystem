@@ -5,7 +5,7 @@
 #include <utility> //std::move
 #include <cstdint> //uint32_t
 #include <cassert> 
-#include <ranges>
+#include <ranges> //std::views::values
 
 struct Event 
 {
@@ -33,14 +33,15 @@ using SubscriptionID  = std::size_t;
 using OnEventCallback = std::function<void(Event const&)>;
 
 //Using this SubscriptionManager is optional, you can use the EventSystem without it.
-//EventSubscriber should be EventSystem< ... >::Subscriber
-//Enum is an enum type that you associate with subscriptions
-template <typename Enum, typename EventSubscriber>
+//Enum should be an enum type that you associate with a particular subscription.
+//You can subscribe to the same type multiple times as long as the enum value differs for each one.
+//EventSystemSubscriber should be EventSystem::Subscriber.
+template <typename Enum, typename EventSystemSubscriber>
 requires std::is_enum_v<Enum>
 class SubscriptionManager
 {
 public:
-    SubscriptionManager(EventSubscriber& subscriber) : mSubscriber{subscriber} {};
+    SubscriptionManager(EventSystemSubscriber& subscriber) : mSubscriber{subscriber} {};
 
     ~SubscriptionManager()
     {
@@ -64,17 +65,15 @@ public:
         return true;
     }
 
-    //Returns false if the unsubscription was not successful. This could be because you accidentally 
-    //used the wrong template type paramater (EventType does not match the type the subscription is subscribed to),
-    //or because you are not subscribed to this subscription at all.
-    template <typename EventType>
+    //Returns true if the unsubscription was successful.
     bool unsub(Enum subscriptionTag)
     {
         bool wasCallbackRemoved {false};
 
         if(auto it{mSubscriptions.find(subscriptionTag)}; it != mSubscriptions.end())
         {
-            wasCallbackRemoved = mSubscriber.unsub<EventType>(it->second.second);
+            auto& [typeIndex, subID] = it->second;
+            wasCallbackRemoved = mSubscriber.unsub(subID, typeIndex);
             if(wasCallbackRemoved) { mSubscriptions.erase(it); }
         }
 
@@ -90,7 +89,7 @@ public:
     }
 
 private:
-    EventSubscriber& mSubscriber;
+    EventSystemSubscriber& mSubscriber;
 
     //The Enum tags differentiate between multiple subscriptions to the same event type
     std::unordered_map<Enum, std::pair<std::type_index, SubscriptionID> > mSubscriptions;
@@ -145,7 +144,9 @@ public:
         requires std::is_enum_v<Enum>
         friend class SubscriptionManager;
 
-        bool unsub(SubscriptionID ID, std::type_index eventTypeIdx) 
+        //Overload to take a type_index instead of being templated on EventType.
+        //This is meant to be called from SubscriptionManager only.
+        bool unsub(SubscriptionID ID, std::type_index eventTypeIdx)
         {
             auto it { mThisEventSys.mCallbackMap.find(eventTypeIdx) };
             if(it != mThisEventSys.mCallbackMap.end())
