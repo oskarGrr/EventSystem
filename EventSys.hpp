@@ -49,7 +49,6 @@ public:
     }
 
     //Returns false if subscriptionTag is already associated with a subscription.
-    //(otherwise returns true if the subscription was successfully put into the event system)
     //This could be the case if you accidentally call this function twice with the same enum or
     //if you accidentally map two different enums to the same integer value... dont do this.
     template <typename EventType>
