@@ -128,9 +128,10 @@ public:
             return subID;
         }
 
-        //returns true if a subscription callback was successfully removed from the event system otherwise returns false
+        //Returns true if a subscription callback was successfully removed from the event system otherwise returns false.
+        //Takes subID as a reference because if the unsubscription is successful then it resets the id to INVALID_SUBSCRIPTION_ID
         template <typename EventType>
-        bool unsub(SubscriptionID subID)
+        bool unsub(SubscriptionID& subID)
         {
             static_assert
             (
@@ -139,7 +140,12 @@ public:
                 " EventSystem::Subscriber::unsub was not a valid event type for this EventSystem."
             );
 
-            return unsub(subID, typeid(EventType));
+            bool const wasSuccessful { unsub(subID, typeid(EventType)) };
+
+            if(wasSuccessful)
+                subID = INVALID_SUBSCRIPTION_ID;
+
+            return wasSuccessful;
         }
 
     private:
@@ -150,7 +156,7 @@ public:
 
         //Overload to take a type_index instead of being templated on EventType.
         //This is meant to be called from SubscriptionManager only.
-        bool unsub(SubscriptionID ID, std::type_index eventTypeIdx)
+        bool unsub(SubscriptionID subID, std::type_index eventTypeIdx)
         {
             auto it { mThisEventSys.mCallbackMap.find(eventTypeIdx) };
             if(it != mThisEventSys.mCallbackMap.end())
@@ -158,8 +164,8 @@ public:
                 auto& callbackVector { it->second };
                 
                 //remove the callback associated with this subID.
-                bool wasCallbackErased = std::erase_if(callbackVector, [ID](auto const& callbackIDPair){
-                    return callbackIDPair.second == ID;
+                bool wasCallbackErased = std::erase_if(callbackVector, [subID](auto const& callbackIDPair){
+                    return callbackIDPair.second == subID;
                 });
 
                 //if that was the last subscription callback in this vector then remove it from the map
