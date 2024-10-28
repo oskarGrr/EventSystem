@@ -30,6 +30,10 @@ template <typename T, typename... Types>
 concept IsTypeInPack = (std::is_same_v<T, Types> || ...);
 
 using SubscriptionID  = std::size_t;
+
+//an invalid sub ID used to represent a subscription ID that is not associated with any subscriptions.
+inline constexpr SubscriptionID INVALID_SUBSCRIPTION_ID { 0 };
+
 using OnEventCallback = std::function<void(Event const&)>;
 
 //Using this SubscriptionManager is optional, you can use the EventSystem without it.
@@ -98,9 +102,6 @@ template <typename... EventTs>
 class EventSystem
 {
 public:
-
-    //an invalid sub ID used to represent a subscription ID that is not associated with any subscriptions.
-    inline constexpr SubscriptionID INVALID_SUBSCRIPTION_ID { 0 };
 
     auto const& getPublisher() const {return mPublisher;}
     auto& getSubscriber() {return mSubscriber;}
