@@ -98,6 +98,10 @@ template <typename... EventTs>
 class EventSystem
 {
 public:
+
+    //an invalid sub ID used to represent a subscription ID that is not associated with any subscriptions.
+    inline constexpr SubscriptionID INVALID_SUBSCRIPTION_ID { 0 };
+
     auto const& getPublisher() const {return mPublisher;}
     auto& getSubscriber() {return mSubscriber;}
 
@@ -171,7 +175,9 @@ public:
         Subscriber(EventSystem<EventTs...>& thisEventSys) : mThisEventSys{thisEventSys} {}
 
         EventSystem<EventTs...>& mThisEventSys;
-        SubscriptionID mNextSubscriptionID {0};
+
+        //start at 1 because INVALID_SUBSCRIPTION_ID is 0
+        SubscriptionID mNextSubscriptionID {1};
     };
 
     struct Publisher
