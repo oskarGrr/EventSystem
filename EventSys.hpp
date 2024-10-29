@@ -140,6 +140,9 @@ public:
                 " EventSystem::Subscriber::unsub was not a valid event type for this EventSystem."
             );
 
+            if(INVALID_SUBSCRIPTION_ID == subID)
+                return false;
+
             bool const wasSuccessful { unsub(subID, typeid(EventType)) };
 
             if(wasSuccessful)
